@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ScrollFree</string>
+    <string name="blink_ready">Blink detection ready</string>
+</resources>
