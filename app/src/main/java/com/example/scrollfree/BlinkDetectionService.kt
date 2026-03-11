@@ -1,14 +1,17 @@
 package com.example.scrollfree
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -17,25 +20,49 @@ import android.view.WindowManager
 import android.widget.TextView
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ProcessLifecycleOwner
-import com.example.scrollfree.FaceAnalyzer
-import com.example.scrollfree.R
+import com.example.scrollfree.accessibility.ScrollActionDispatcher
+import com.example.scrollfree.core.AppRuntimeState
+import com.example.scrollfree.core.AppSettingsRepository
+import com.example.scrollfree.model.OverlayUiState
+import com.example.scrollfree.model.ScrollAction
+import com.example.scrollfree.model.ServiceStatus
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
+class BlinkDetectionService : Service(), FaceAnalyzer.Listener {
 
-class BlinkDetectionService : Service() {
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private lateinit var windowManager: WindowManager
-    private lateinit var overlayView: View
+    private lateinit var settingsRepository: AppSettingsRepository
+
+    private var cameraProvider: ProcessCameraProvider? = null
+    private var cameraRunning = false
+
+    private var windowManager: WindowManager? = null
+    private var overlayView: View? = null
+    private var overlayMessageText: TextView? = null
+
+    private var settingsJob: Job? = null
+    private var overlayJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        showOverlay()
-        startCamera()
+        settingsRepository = AppSettingsRepository.get(this)
+
+        AppRuntimeState.setServiceStatus(ServiceStatus.STARTING)
+        observeOverlayState()
+        observeSettings()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -43,16 +70,105 @@ class BlinkDetectionService : Service() {
         return START_STICKY
     }
 
+    private fun observeSettings() {
+        settingsJob?.cancel()
+        settingsJob = serviceScope.launch {
+            settingsRepository.settings.collectLatest { settings ->
+                if (settings.overlayEnabled) {
+                    showOverlayIfAllowed()
+                } else {
+                    hideOverlay()
+                }
+
+                if (settings.detectionEnabled) {
+                    startCameraIfPossible()
+                } else {
+                    stopCamera()
+                    AppRuntimeState.setServiceStatus(ServiceStatus.INACTIVE)
+                }
+            }
+        }
+    }
+
+    private fun observeOverlayState() {
+        overlayJob?.cancel()
+        overlayJob = serviceScope.launch {
+            AppRuntimeState.overlayState.collectLatest { state ->
+                renderOverlayState(state)
+            }
+        }
+    }
+
+    private fun renderOverlayState(state: OverlayUiState) {
+        overlayMessageText?.text = state.message
+        overlayView?.alpha = if (state.active) 1.0f else 0.78f
+    }
+
+    private fun startCameraIfPossible() {
+        if (cameraRunning) {
+            return
+        }
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            AppRuntimeState.setServiceStatus(ServiceStatus.ERROR)
+            Log.w(TAG, "Camera permission missing; cannot start blink detection")
+            return
+        }
+
+        AppRuntimeState.setServiceStatus(ServiceStatus.STARTING)
+
+        val providerFuture = ProcessCameraProvider.getInstance(this)
+        providerFuture.addListener({
+            try {
+                cameraProvider = providerFuture.get()
+                val analyzer = FaceAnalyzer(
+                    settingsProvider = { settingsRepository.settings.value },
+                    listener = this
+                )
+
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .also {
+                        it.setAnalyzer(ContextCompat.getMainExecutor(this), analyzer)
+                    }
+
+                val selector = CameraSelector.DEFAULT_FRONT_CAMERA
+                cameraProvider?.unbindAll()
+                cameraProvider?.bindToLifecycle(ProcessLifecycleOwner.get(), selector, imageAnalysis)
+                cameraRunning = true
+            } catch (t: Throwable) {
+                cameraRunning = false
+                AppRuntimeState.setServiceStatus(ServiceStatus.ERROR)
+                Log.e(TAG, "Failed to bind camera", t)
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun stopCamera() {
+        try {
+            cameraProvider?.unbindAll()
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed to unbind camera cleanly", t)
+        } finally {
+            cameraRunning = false
+            cameraProvider = null
+        }
+    }
+
     private fun createNotification() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channelId = "scrollfree_blink_service"
+        val channelId = CHANNEL_ID
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 channelId,
                 "Blink Detection Service",
                 NotificationManager.IMPORTANCE_LOW
-            )
+            ).apply {
+                description = "Foreground service for ScrollFree blink detection"
+                setShowBadge(false)
+            }
             notificationManager.createNotificationChannel(channel)
         }
 
@@ -66,60 +182,109 @@ class BlinkDetectionService : Service() {
             .setContentTitle("ScrollFree Running")
             .setContentText("Blink detection active")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setOngoing(true)
             .build()
 
-        startForeground(1, notification)
+        startForeground(NOTIFICATION_ID, notification)
     }
 
+    private fun showOverlayIfAllowed() {
+        if (overlayView != null) {
+            return
+        }
 
-    private fun showOverlay() {
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        val inflater = LayoutInflater.from(this)
-        overlayView = inflater.inflate(R.layout.overlay_widget, null)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Log.w(TAG, "Overlay permission missing; widget will stay hidden")
+            return
+        }
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+        try {
+            windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+            val inflater = LayoutInflater.from(this)
+            overlayView = inflater.inflate(R.layout.overlay_widget, null)
+            overlayMessageText = overlayView?.findViewById(R.id.blinkStatusText)
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                } else {
+                    WindowManager.LayoutParams.TYPE_PHONE
+                },
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        )
-        params.gravity = Gravity.TOP or Gravity.END
-        params.x = 20
-        params.y = 100
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.END
+                x = 20
+                y = 140
+            }
 
-        windowManager.addView(overlayView, params)
+            windowManager?.addView(overlayView, params)
+            renderOverlayState(AppRuntimeState.overlayState.value)
+        } catch (t: Throwable) {
+            overlayView = null
+            overlayMessageText = null
+            Log.e(TAG, "Failed to show overlay", t)
+        }
     }
 
-    private fun startCamera() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+    private fun hideOverlay() {
+        try {
+            val view = overlayView
+            if (view != null) {
+                windowManager?.removeView(view)
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "Failed to remove overlay view", t)
+        } finally {
+            overlayView = null
+            overlayMessageText = null
+        }
+    }
 
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
+    override fun onFaceFound() {
+        AppRuntimeState.setServiceStatus(ServiceStatus.ACTIVE)
+    }
 
-            val imageAnalysis = ImageAnalysis.Builder()
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also {
-                    it.setAnalyzer(ContextCompat.getMainExecutor(this), FaceAnalyzer())
-                }
+    override fun onNoFace() {
+        AppRuntimeState.setServiceStatus(ServiceStatus.NO_FACE)
+    }
 
-            val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
+    override fun onAction(action: ScrollAction) {
+        val dispatched = ScrollActionDispatcher.dispatch(action)
+        if (!dispatched) {
+            AppRuntimeState.setServiceStatus(ServiceStatus.ERROR)
+            Log.w(TAG, "Scroll action ignored because accessibility service is not connected")
+            return
+        }
 
-            cameraProvider.unbindAll()
-            cameraProvider.bindToLifecycle(
-                ProcessLifecycleOwner.get(), cameraSelector, imageAnalysis
-            )
+        AppRuntimeState.showActionFeedback(action)
+        serviceScope.launch {
+            delay(900)
+            AppRuntimeState.hideActionFeedbackIfVisible()
+        }
+    }
 
-        }, ContextCompat.getMainExecutor(this))
+    override fun onDetectorError(message: String) {
+        AppRuntimeState.setServiceStatus(ServiceStatus.ERROR)
+        Log.e(TAG, message)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        if (::overlayView.isInitialized) windowManager.removeView(overlayView)
+        stopCamera()
+        hideOverlay()
+        settingsJob?.cancel()
+        overlayJob?.cancel()
+        serviceScope.cancel()
+        AppRuntimeState.setServiceStatus(ServiceStatus.INACTIVE)
+    }
+
+    companion object {
+        private const val TAG = "ScrollFree"
+        private const val CHANNEL_ID = "scrollfree_blink_service"
+        private const val NOTIFICATION_ID = 1
     }
 }
