@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">ScrollFree</string>
     <string name="blink_ready">Blink detection ready</string>
+    <string name="accessibility_service_description">Allows ScrollFree to perform scroll gestures after blink detection.</string>
 </resources>
