@@ -1,7 +1,220 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.camera.view.PreviewView
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/previewView"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:layout_gravity="center" />
+    android:background="#0B1220"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/hero_panel_background"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ScrollFree"
+                android:textColor="#FFFFFF"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Hands-free scrolling using blink gestures"
+                android:textColor="#C2D1F8"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/runtimeStateText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/status_pill_background"
+                android:paddingStart="12dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="6dp"
+                android:text="Status: Inactive"
+                android:textColor="#EAF1FF"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/card_background"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Setup Checklist"
+                android:textColor="#EAF1FF"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Grant permissions once, then enable detection."
+                android:textColor="#A6B8DF"
+                android:textSize="13sp" />
+
+            <TextView
+                android:id="@+id/cameraStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Camera: missing"
+                android:textColor="#EAF1FF"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btnGrantCamera"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Grant Camera" />
+
+            <TextView
+                android:id="@+id/overlayStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Overlay: missing"
+                android:textColor="#EAF1FF"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btnGrantOverlay"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Grant Overlay" />
+
+            <TextView
+                android:id="@+id/accessibilityStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:text="Accessibility: missing"
+                android:textColor="#EAF1FF"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btnGrantAccessibility"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Open Accessibility Settings" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/card_background"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Detection Controls"
+                android:textColor="#EAF1FF"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Enable Blink Detection"
+                    android:textColor="#EAF1FF"
+                    android:textSize="15sp" />
+
+                <Switch
+                    android:id="@+id/switchDetection"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Show Floating Widget"
+                    android:textColor="#EAF1FF"
+                    android:textSize="15sp" />
+
+                <Switch
+                    android:id="@+id/switchOverlay"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="Blink Sensitivity"
+                android:textColor="#EAF1FF"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/sensitivityValueText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="55%"
+                android:textColor="#A6B8DF"
+                android:textSize="13sp" />
+
+            <SeekBar
+                android:id="@+id/seekSensitivity"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:max="99"
+                android:progress="54" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/runtimeHintText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Gesture map: single blink = scroll down, double blink = scroll up"
+            android:textColor="#90A4CE"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>
