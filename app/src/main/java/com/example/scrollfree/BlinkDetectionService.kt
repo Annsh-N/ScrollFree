@@ -50,6 +50,9 @@ class BlinkDetectionService : Service(), FaceAnalyzer.Listener {
     private var windowManager: WindowManager? = null
     private var overlayView: View? = null
     private var overlayMessageText: TextView? = null
+    private var overlayFeedbackText: TextView? = null
+    private var overlayStatusDot: View? = null
+    private var feedbackWasVisible = false
 
     private var settingsJob: Job? = null
     private var overlayJob: Job? = null
@@ -102,6 +105,37 @@ class BlinkDetectionService : Service(), FaceAnalyzer.Listener {
     private fun renderOverlayState(state: OverlayUiState) {
         overlayMessageText?.text = state.message
         overlayView?.alpha = if (state.active) 1.0f else 0.78f
+        overlayStatusDot?.setBackgroundResource(
+            if (state.active) R.drawable.overlay_dot_active else R.drawable.overlay_dot_inactive
+        )
+
+        if (state.feedbackVisible && state.lastAction != null) {
+            overlayFeedbackText?.text = if (state.lastAction == ScrollAction.DOWN) {
+                "Scroll ↓"
+            } else {
+                "Scroll ↑"
+            }
+            overlayFeedbackText?.visibility = View.VISIBLE
+            if (!feedbackWasVisible) {
+                overlayFeedbackText?.alpha = 0f
+                overlayFeedbackText?.animate()?.alpha(1f)?.setDuration(160)?.start()
+            }
+            feedbackWasVisible = true
+        } else {
+            if (feedbackWasVisible) {
+                overlayFeedbackText?.animate()
+                    ?.alpha(0f)
+                    ?.setDuration(120)
+                    ?.withEndAction {
+                        overlayFeedbackText?.visibility = View.GONE
+                        overlayFeedbackText?.alpha = 1f
+                    }
+                    ?.start()
+            } else {
+                overlayFeedbackText?.visibility = View.GONE
+            }
+            feedbackWasVisible = false
+        }
     }
 
     private fun startCameraIfPossible() {
@@ -203,6 +237,8 @@ class BlinkDetectionService : Service(), FaceAnalyzer.Listener {
             val inflater = LayoutInflater.from(this)
             overlayView = inflater.inflate(R.layout.overlay_widget, null)
             overlayMessageText = overlayView?.findViewById(R.id.blinkStatusText)
+            overlayFeedbackText = overlayView?.findViewById(R.id.feedbackText)
+            overlayStatusDot = overlayView?.findViewById(R.id.statusDot)
 
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
@@ -241,6 +277,9 @@ class BlinkDetectionService : Service(), FaceAnalyzer.Listener {
         } finally {
             overlayView = null
             overlayMessageText = null
+            overlayFeedbackText = null
+            overlayStatusDot = null
+            feedbackWasVisible = false
         }
     }
 

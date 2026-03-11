@@ -24,13 +24,14 @@ object AppRuntimeState {
             ServiceStatus.NO_FACE -> "No face"
             ServiceStatus.ERROR -> "Error"
         }
-        _overlayState.value = _overlayState.value.copy(active = status == ServiceStatus.ACTIVE, message = message)
+        _overlayState.value = _overlayState.value.copy(
+            active = status == ServiceStatus.ACTIVE,
+            message = message
+        )
     }
 
     fun showActionFeedback(action: ScrollAction) {
-        val label = if (action == ScrollAction.DOWN) "Scroll ↓" else "Scroll ↑"
         _overlayState.value = _overlayState.value.copy(
-            message = label,
             lastAction = action,
             feedbackVisible = true
         )
@@ -39,16 +40,9 @@ object AppRuntimeState {
     fun hideActionFeedbackIfVisible() {
         if (!_overlayState.value.feedbackVisible) return
 
-        val message = when (_serviceStatus.value) {
-            ServiceStatus.INACTIVE -> "Inactive"
-            ServiceStatus.STARTING -> "Starting"
-            ServiceStatus.ACTIVE -> "Active"
-            ServiceStatus.NO_FACE -> "No face"
-            ServiceStatus.ERROR -> "Error"
-        }
         _overlayState.value = _overlayState.value.copy(
-            message = message,
-            feedbackVisible = false
+            feedbackVisible = false,
+            lastAction = null
         )
     }
 }
